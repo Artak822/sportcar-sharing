@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { Badge, BookingSummary, SpecList } from '../ds.js'
 import DateRange from '../components/DateRange.jsx'
-import { BODY_TYPES, humanDay, humanDays, humanDt, nextWeekend, rub, withTime } from '../format.js'
+import { BODY_TYPES, humanDay, humanDays, humanDt, pickDates, rub, withTime } from '../format.js'
 import { useStore, usePageInfo } from '../store.jsx'
 
 export default function CarPage() {
@@ -11,9 +11,7 @@ export default function CarPage() {
   const { me, version } = useStore()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const weekend = nextWeekend()
-  const from = (params.get('from') || weekend.from).slice(0, 10)
-  const to = (params.get('to') || weekend.to).slice(0, 10)
+  const { from, to } = pickDates(params)
   const location = params.get('location') || ''
   const extras = params.get('extras')?.split(',').filter(Boolean) ?? []
 

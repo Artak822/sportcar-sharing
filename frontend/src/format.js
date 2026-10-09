@@ -33,6 +33,20 @@ export const humanDays = (from, to) => `${humanDay(from)} — ${humanDay(to)}`
 export const plural = (n, one, few, many) =>
   `${n}${NBSP}${n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many}`
 
+// Первый день, который ещё можно выбрать: сегодня — только пока не наступили 10:00
+export function firstDay(now = new Date()) {
+  const d = new Date(now)
+  if (toLocal(now).slice(11) >= PICKUP_TIME) d.setDate(d.getDate() + 1)
+  return toDay(d)
+}
+
+// Даты из адреса: прошедшие или кривые заменяем ближайшими выходными
+export function pickDates(params) {
+  const from = params.get('from')?.slice(0, 10)
+  const to = params.get('to')?.slice(0, 10)
+  return from && to && from >= firstDay() && from < to ? { from, to } : nextWeekend()
+}
+
 export function nextWeekend(now = new Date()) {
   const sat = new Date(now)
   sat.setDate(now.getDate() + ((6 - now.getDay() + 7) % 7 || 7))

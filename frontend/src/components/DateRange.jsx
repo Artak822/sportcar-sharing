@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MONTHS_FULL, days, humanDay, parseDay, plural, toDay } from '../format.js'
+import { MONTHS_FULL, days, firstDay, humanDay, parseDay, plural, toDay } from '../format.js'
 
 const WEEK = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
 
@@ -12,6 +12,7 @@ export default function DateRange({ from, to, onChange }) {
   const [count, setCount] = useState(2)
   const root = useRef(null)
   const today = toDay(new Date())
+  const min = firstDay()
 
   function show(field) {
     setDraft(field === 'from' ? { from: null, to: null } : { from, to: null })
@@ -67,7 +68,7 @@ export default function DateRange({ from, to, onChange }) {
           </div>
           <div className="calendar-months">
             {Array.from({ length: count }, (_, i) => (
-              <Month key={i} month={addMonths(month, i)} today={today} from={draft.from} to={end}
+              <Month key={i} month={addMonths(month, i)} today={today} min={min} from={draft.from} to={end}
                 onPick={pick} onHover={setHover} />
             ))}
           </div>
@@ -81,7 +82,7 @@ export default function DateRange({ from, to, onChange }) {
   )
 }
 
-function Month({ month, today, from, to, onPick, onHover }) {
+function Month({ month, today, min, from, to, onPick, onHover }) {
   const first = (month.getDay() + 6) % 7 // понедельник — первый
   const total = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
   const cells = [...Array(first).fill(null), ...Array.from({ length: total }, (_, i) => toDay(new Date(month.getFullYear(), month.getMonth(), i + 1)))]
@@ -91,7 +92,7 @@ function Month({ month, today, from, to, onPick, onHover }) {
       <div className="month-grid" onMouseLeave={() => onHover(null)}>
         {WEEK.map((w, i) => <span key={w} className={'wd' + (i >= 5 ? ' wd-end' : '')}>{w}</span>)}
         {cells.map((d, i) => d === null ? <span key={'e' + i} /> : (
-          <button key={d} type="button" disabled={d < today}
+          <button key={d} type="button" disabled={d < min}
             className={'day' + (d === from ? ' day-start' : '') + (d === to ? ' day-end' : '')
               + (from && to && d > from && d < to ? ' day-in' : '') + (d === today ? ' day-today' : '')}
             onClick={() => onPick(d)} onMouseEnter={() => onHover(d)}

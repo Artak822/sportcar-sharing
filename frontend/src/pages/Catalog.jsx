@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { CarCard } from '../ds.js'
 import DateRange from '../components/DateRange.jsx'
-import { BODY_TYPES, days, humanDays, nextWeekend, plural, rub, withTime } from '../format.js'
+import { BODY_TYPES, days, humanDays, pickDates, plural, rub, withTime } from '../format.js'
 import { usePageInfo } from '../store.jsx'
 
 const PRICES = [20000, 30000, 50000]
@@ -13,10 +13,8 @@ const SORTS = { price: 'Сначала дешевле', power: 'Сначала �
 export default function Catalog() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const weekend = nextWeekend()
   const f = {
-    from: (params.get('from') || weekend.from).slice(0, 10),
-    to: (params.get('to') || weekend.to).slice(0, 10),
+    ...pickDates(params),
     body_type: params.get('body_type') || '',
     max_price_per_day: params.get('max_price_per_day') || '',
     min_power: params.get('min_power') || '',
