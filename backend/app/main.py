@@ -1,17 +1,21 @@
 """REST API Pitlane. Запуск: uvicorn app.main:app --reload (из папки backend)."""
+import json
 import secrets
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 from datetime import timedelta
 from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Route
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import agent
 from . import db as database
 from . import services as s
+from .mcp_server import mcp
 from .services import ServiceError
 
 SESSION_COOKIE = "pitlane_session"
@@ -21,6 +25,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 
+class MCPEndpoint:
+    """MCP по Streamable HTTP на /mcp того же сервера. Без сессий: каждый вызов — отдельный запрос с токеном.
+    Менеджер сессий MCP запускается один раз на экземпляр, поэтому приложение пересоздаётся при каждом старте."""
+    app = None
+
+    async def __call__(self, scope, receive, send):
+        await self.app(scope, receive, send)
+
+
+mcp_endpoint = MCPEndpoint()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     from .seed import seed
@@ -28,10 +44,13 @@ async def lifespan(_: FastAPI):
     database.init(conn)
     seed(conn)
     conn.close()
-    yield
+    mcp_endpoint.app = mcp.streamable_http_app(stateless_http=True, json_response=True)
+    async with mcp.session_manager.run():
+        yield
 
 
 app = FastAPI(title="Pitlane API", version="0.1.0", lifespan=lifespan)
+app.router.routes.append(Route("/mcp", mcp_endpoint))
 
 
 @app.exception_handler(ServiceError)
@@ -60,7 +79,7 @@ def get_db(request: Request):
         conn.close()
 
 
-def optional_user(request: Request, db=Depends(get_db)) -> dict | None:
+def session_user(db, request: Request) -> dict | None:
     auth = request.headers.get("authorization", "")
     token = auth[7:] if auth.lower().startswith("bearer ") else request.cookies.get(SESSION_COOKIE)
     if not token:
@@ -69,6 +88,10 @@ def optional_user(request: Request, db=Depends(get_db)) -> dict | None:
         "SELECT u.id, u.name, u.email, ss.scope FROM sessions ss JOIN users u ON u.id = ss.user_id"
         " WHERE ss.token = ? AND ss.expires_at > ?", (token, s.iso(s.now()))).fetchone()
     return dict(row) if row else None
+
+
+def optional_user(request: Request, db=Depends(get_db)) -> dict | None:
+    return session_user(db, request)
 
 
 def require_user(user=Depends(optional_user)) -> dict:
@@ -182,6 +205,11 @@ def agent_token(user=Depends(require_web), db=Depends(get_db)):
 
 # ——— Клиент ———
 
+@app.get("/api/me")
+def me(user=Depends(require_user), db=Depends(get_db)):
+    return {"id": user["id"], "email": user["email"], **s.profile_status(db, user)}
+
+
 @app.get("/api/me/status")
 def my_status(user=Depends(require_user), db=Depends(get_db)):
     return s.profile_status(db, user)
@@ -225,6 +253,111 @@ def cancel(action_id: str, user=Depends(require_web), db=Depends(get_db)):
     return s.cancel_action(db, user, action_id)
 
 
+# ——— Чат с агентом ———
+# Без get_db: пока агент думает, MCP-инструменты пишут в базу из своих соединений,
+# поэтому держать транзакцию на весь запрос нельзя — открываем короткие соединения сами.
+
+class ChatIn(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    page: str | None = Field(None, max_length=300, description="Что клиент сейчас видит на сайте — подсказка агенту")
+
+
+HISTORY_ITEMS = 40
+
+
+def chat_user(request: Request) -> dict:
+    with closing(database.connect()) as db:
+        user = session_user(db, request)
+    if not user:
+        raise ServiceError("unauthorized", "Войдите в аккаунт", 401)
+    if user["scope"] != "web":
+        raise ServiceError("forbidden_for_agent", "Чат доступен только клиенту в браузере", 403)
+    return user
+
+
+def agent_token_for(db, user_id: int) -> str:
+    """Переиспользуем живой токен агента, чтобы не плодить сессии на каждое сообщение."""
+    row = db.execute("SELECT token FROM sessions WHERE user_id = ? AND scope = 'agent' AND expires_at > ?"
+                     " ORDER BY expires_at DESC LIMIT 1", (user_id, s.iso(s.now() + timedelta(minutes=10)))).fetchone()
+    return row["token"] if row else create_session(db, user_id, "agent", timedelta(hours=AGENT_TOKEN_HOURS))
+
+
+def chat_view(db, user: dict, rows) -> list[dict]:
+    """Элементы ленты для фронтенда. У карточек действий — актуальный статус из базы."""
+    items = []
+    for r in rows:
+        ui = json.loads(r["ui"])
+        if ui["type"] == "action":
+            try:
+                ui = {"type": "action", "action": s.get_action(db, user, ui["action_id"])}
+            except ServiceError:
+                continue
+        items.append({"id": r["id"], **ui})
+    return items
+
+
+@app.get("/api/chat")
+def chat_history(user=Depends(chat_user)):
+    with closing(database.connect()) as db:
+        s.housekeeping(db)
+        rows = db.execute("SELECT id, ui FROM chat_items WHERE user_id = ? AND ui IS NOT NULL ORDER BY id",
+                          (user["id"],)).fetchall()
+        return {"items": chat_view(db, user, rows)}
+
+
+@app.post("/api/chat")
+async def chat(body: ChatIn, request: Request, user=Depends(chat_user)):
+    with closing(database.connect()) as db:
+        s.housekeeping(db)
+        token = agent_token_for(db, user["id"])
+        rows = db.execute("SELECT llm, ui FROM chat_items WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+                          (user["id"], HISTORY_ITEMS)).fetchall()[::-1]
+        history = [json.loads(r["llm"]) for r in rows if r["llm"]]
+        while history and history[0]["role"] != "user":  # не начинаем контекст с середины вызова инструментов
+            history.pop(0)
+        action_ids = [json.loads(r["ui"])["action_id"] for r in rows if r["ui"] and '"action"' in r["ui"]]
+        actions = [s.get_action(db, user, a) for a in action_ids[-5:]]
+
+    user_msg = {"role": "user", "content": body.message}
+    try:
+        produced = await agent.run(request.app, token, [*history, user_msg], user["name"], actions, body.page)
+    except agent.AgentUnavailable:
+        raise ServiceError("agent_unavailable", "Консьерж сейчас недоступен, попробуйте через минуту", 503)
+
+    with closing(database.connect()) as db:
+        db.execute("BEGIN IMMEDIATE")
+        created = s.iso(s.now())
+        ids = []
+        for item in [{"llm": user_msg, "ui": {"type": "user", "text": body.message}}, *produced]:
+            cur = db.execute("INSERT INTO chat_items (user_id, llm, ui, created_at) VALUES (?,?,?,?)", (
+                user["id"], *(json.dumps(item[k], ensure_ascii=False) if item.get(k) else None for k in ("llm", "ui")),
+                created))
+            ids.append(cur.lastrowid)
+        db.execute("COMMIT")
+        rows = db.execute(f"SELECT id, ui FROM chat_items WHERE id IN ({','.join('?' * len(ids))})"
+                          " AND ui IS NOT NULL ORDER BY id", ids).fetchall()
+        return {"items": chat_view(db, user, rows)}
+
+
+@app.delete("/api/chat")
+def chat_reset(user=Depends(chat_user)):
+    with closing(database.connect()) as db:
+        db.execute("DELETE FROM chat_items WHERE user_id = ?", (user["id"],))
+    return {"ok": True}
+
+
 # Фронтенд с того же адреса — чтобы cookie сессии работала без CORS
 app.mount("/design-system", StaticFiles(directory=ROOT / "design-system", html=True), name="design-system")
 app.mount("/prototype", StaticFiles(directory=ROOT / "prototype", html=True), name="prototype")
+
+# Собранный сайт (npm run build). В разработке его отдаёт Vite на :5173, а этот блок не нужен.
+SITE = ROOT / "frontend" / "dist"
+if SITE.exists():
+    app.mount("/assets", StaticFiles(directory=SITE / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def site(path: str):
+        """Маршруты сайта — на стороне React, поэтому на любой путь кроме API отдаём index.html."""
+        if path.startswith(("api/", "mcp")):
+            raise ServiceError("not_found", "Не найдено", 404)
+        return FileResponse(SITE / "index.html")

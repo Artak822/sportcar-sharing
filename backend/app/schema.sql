@@ -102,3 +102,13 @@ CREATE TABLE IF NOT EXISTS manager_requests (
   message    TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+-- История чата. llm — сообщение в формате модели (для контекста), ui — элемент ленты (для отрисовки).
+CREATE TABLE IF NOT EXISTS chat_items (
+  id         INTEGER PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id),
+  llm        TEXT,                   -- JSON или NULL
+  ui         TEXT,                   -- JSON или NULL
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS chat_items_user ON chat_items (user_id, id);

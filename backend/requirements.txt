@@ -1,4 +1,6 @@
-fastapi==0.118.0
+fastapi==0.143.0
 uvicorn==0.37.0
+mcp==2.3.0
+openai==3.26.1
 httpx==0.28.1
 pytest==8.4.2

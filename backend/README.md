@@ -1,6 +1,6 @@
 # Pitlane API
 
-FastAPI + SQLite. Бизнес-логика в `app/services.py`: её вызывают REST API и (следующим шагом) MCP-сервер агента.
+FastAPI + SQLite. Бизнес-логика в `app/services.py`: её вызывают REST API, MCP-сервер агента (`app/mcp_server.py`, `/mcp`) и чат (`app/agent.py`, Gemini).
 
 ## Запуск
 
@@ -10,7 +10,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
+- Ключ Gemini — в корневом `.env`: `GEMINI_API_KEY=…`; модели можно сменить через `GEMINI_MODEL` и `GEMINI_FALLBACK_MODEL`
 - Документация API: http://localhost:8000/docs
+- Сайт в режиме разработки — `frontend/` (см. корневой README); если собран `frontend/dist`, API раздаёт его сам
 - Прототип чата: http://localhost:8000/prototype/chat.html
 - База — файл `backend/pitlane.db`, создаётся и заполняется при первом запуске. Сбросить: `.venv/bin/python -m app.seed --reset`
 - Тесты: `.venv/bin/pytest`
@@ -49,6 +51,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `create_booking`, `change_booking_dates`, `update_booking_extras`, `cancel_booking`, `request_manager` | `POST /api/actions` `{tool, params}` → черновик `proposed` | нужен |
 | — (только кнопка в чате) | `POST /api/actions/{id}/confirm`, `/cancel` | только `web` |
 | — (страница оплаты) | `POST /api/bookings/{id}/pay` — заглушка, сразу помечает оплаченной | только `web` |
+
+Чат: `GET /api/chat` — история, `POST /api/chat` `{message, page?}` — ход агента (503 `agent_unavailable`, если модель не ответила), `DELETE /api/chat` — новый разговор. Только `web`.
 
 `summary` черновика — это готовые пропсы для `AgentAction`: `title`, `details`, `note`.
 
