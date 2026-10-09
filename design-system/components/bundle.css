@@ -92,6 +92,8 @@ body { margin: 0; font-family: var(--font-sans); font-size: 16px; line-height: 2
 .pl-action-btns { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .pl-action-done { border-color: var(--go); }
 .pl-action-failed { border-color: var(--stop); }
+.pl-action-cancelled { border-color: var(--line); color: var(--ink-muted); }
+.pl-action-cancelled .pl-tool { background: var(--surface-sunken); color: var(--ink-muted); }
 .pl-action-note { font-size: 14px; line-height: 20px; color: var(--ink-muted); margin: 0; }
 
 @media (prefers-reduced-motion: reduce) { .pl-btn, .pl-car { transition: none; } }

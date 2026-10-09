@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitlane — чат агента</title>
+<link rel="stylesheet" href="../design-system/tokens.css">
+<link rel="stylesheet" href="../design-system/components/bundle.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--surface-sunken); color: var(--ink); font-family: var(--font-sans); }
+  #root { height: 100%; }
+
+  .app { height: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; background: var(--surface); border-inline: 1px solid var(--line); }
+  .top { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
+  .top .pl-avatar { flex: none; }
+  .top-name { font-weight: 600; }
+  .top-sub { font-size: 13px; color: var(--ink-muted); }
+  .top-sub::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--go); margin-right: 6px; vertical-align: 1px; }
+  .top select { margin-left: auto; font: inherit; font-size: 13px; color: var(--ink); background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 4px 8px; }
+
+  .feed { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+  .feed > * { flex-shrink: 0; }
+  .day { align-self: center; font-size: 12px; color: var(--ink-muted); }
+
+  .typing-row { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .typing-text { font-size: 14px; color: var(--ink-muted); }
+
+  .block { margin-left: 44px; max-width: calc(100% - 44px); }
+  .cars { display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: var(--space-2); }
+  .cars > .pl-car { flex: none; width: 264px; scroll-snap-align: start; }
+  .block .pl-action { max-width: 440px; }
+
+  .typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--agent); opacity: .35; animation: blink 1.2s infinite; }
+  .typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 40% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .typing i { animation: none; opacity: .7; } }
+
+  .chips { display: flex; gap: var(--space-2); flex-wrap: wrap; padding: 0 var(--space-4) var(--space-2); }
+  .chip { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-pill); padding: 6px 12px; cursor: pointer; }
+  .chip:hover { border-color: var(--ink-muted); }
+  .chip:focus-visible, .top select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .composer { display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--line); }
+  .composer .pl-field { flex: 1; }
+  .hint-line { padding: 0 var(--space-4) var(--space-3); margin-top: calc(-1 * var(--space-2)); font-size: 12px; color: var(--ink-muted); }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 640px) {
+    .app { border: 0; }
+    .block { margin-left: 0; max-width: 100%; }
+    .cars > .pl-car { width: 82%; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="../design-system/components/bundle.js"></script>
+<script>
+/*
+ * Прототип чата агента. Ответы агента заскриптованы: функция `agent()` изображает модель,
+ * а `api` — сервер. В настоящем приложении на их месте будут LLM с MCP-инструментами
+ * и POST /api/actions/{id}/confirm (см. docs/mcp-tools.md).
+ */
+(function () {
+  var h = React.createElement, useState = React.useState, useEffect = React.useEffect, useRef = React.useRef;
+  var P = window.Pitlane;
+  var NBSP = ' ';
+  function rub(n) { return n.toLocaleString('ru-RU') + NBSP + '₽'; }
+  function now() { return new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // ——— «Сервер»: данные, которые вернули бы инструменты ———
+  var CARS = [
+    { id: 'bmw-z4', name: 'BMW Z4 M40i', pricePerDay: 24900, status: 'available', specs: { power: 340, accel: 4.5, seats: 2 } },
+    { id: 'mustang', name: 'Ford Mustang GT Convertible', pricePerDay: 18900, status: 'available', specs: { power: 450, accel: 4.8, seats: 4 } },
+    { id: 'boxster', name: 'Porsche 718 Boxster S', pricePerDay: 29500, status: 'booked', specs: { power: 350, accel: 4.4, seats: 2 } }
+  ];
+  var TRIP = { from: 'сб, 17 окт, 10:00', to: 'пн, 19 окт, 10:00', days: 2 };
+  var INSURANCE = 3500, DEPOSIT = 100000, LOCATION = 'Пресненская наб., 12';
+  var nextActionId = 1;
+
+  function quote(car, insurance) {
+    var base = car.pricePerDay * TRIP.days, extra = insurance ? INSURANCE * TRIP.days : 0;
+    return { base: base, extra: extra, total: base + extra, deposit: DEPOSIT };
+  }
+
+  // ——— Приложение ———
+  function App() {
+    var _m = useState([{ id: 0, role: 'agent', kind: 'text', time: now(), text: 'Здравствуйте. Я помощник Pitlane: подберу машину, посчитаю стоимость и оформлю бронь. Ничего не меняю без вашего подтверждения.' }]);
+    var msgs = _m[0], setMsgs = _m[1];
+    var _t = useState(false), typing = _t[0], setTyping = _t[1];
+    var _st = useState(''), status = _st[0], setStatus = _st[1];
+    var _c = useState(['Хочу кабриолет на выходные, до 30 тысяч в сутки', 'Какой депозит?']), chips = _c[0], setChips = _c[1];
+    var _v = useState(''), draft = _v[0], setDraft = _v[1];
+    var _th = useState('auto'), theme = _th[0], setTheme = _th[1];
+    var ctx = useRef({ car: null }), feed = useRef(null), msgId = useRef(1);
+
+    useEffect(function () {
+      if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', theme);
+    }, [theme]);
+    useEffect(function () { var f = feed.current; f.scrollTop = f.scrollHeight; }, [msgs, typing]);
+
+    function push(m) { m.id = msgId.current++; m.time = m.time || now(); setMsgs(function (a) { return a.concat([m]); }); return m.id; }
+    function patch(id, p) { setMsgs(function (a) { return a.map(function (m) { return m.id === id ? Object.assign({}, m, p) : m; }); }); }
+    async function say(text, delay) { setStatus(''); setTyping(true); await wait(delay || 700); setTyping(false); push({ role: 'agent', kind: 'text', text: text }); }
+    // Вызов инструмента клиенту виден только как статус «Ищу машины…»; имена инструментов — для логов, не для интерфейса
+    var TOOL_STATUS = { search_cars: 'Ищу машины', show_cars: 'Показываю варианты', quote_price: 'Считаю стоимость', create_booking: 'Готовлю бронь', get_rental_terms: 'Смотрю условия аренды' };
+    async function tool(name, args) { console.debug('[tool]', name, args); setStatus(TOOL_STATUS[name] + '…'); setTyping(true); await wait(600); setTyping(false); setStatus(''); }
+
+    // Изображает модель: по тексту клиента решает, какие инструменты вызвать
+    async function agent(text) {
+      var t = text.toLowerCase();
+      setChips([]);
+      if (/кабрио|выходн|подбер/.test(t)) {
+        setTyping(true); await wait(500); setTyping(false);
+        await tool('search_cars', 'body_type: cabriolet, 17–19 окт, до 30 000 ₽ · 3 машины');
+        await say('Нашёл три кабриолета на 17–19 октября. Porsche на эти даты уже занят, остальные свободны.', 500);
+        await tool('show_cars', 'bmw-z4, mustang, boxster');
+        push({ kind: 'cars', cars: CARS });
+        setChips(['Давай BMW, со страховкой', 'Чем они отличаются?']);
+      } else if (/bmw|бмв|mustang|мустанг/.test(t)) {
+        var car = /mustang|мустанг/.test(t) ? CARS[1] : CARS[0];
+        ctx.current.car = car;
+        if (/страхов/.test(t)) return propose(car, !/без/.test(t));
+        await say(car.name + ' на 17–19 октября. Добавить полную страховку? Она стоит ' + rub(INSURANCE) + ' в сутки и снимает франшизу.');
+        setChips(['Со страховкой', 'Без страховки']);
+      } else if (/страхов/.test(t) && ctx.current.car) {
+        return propose(ctx.current.car, !/без/.test(t));
+      } else if (/отлича|разниц/.test(t)) {
+        await say('BMW Z4 легче и острее в поворотах, но только на двоих. Mustang мощнее, звучит громче и берёт четверых, при этом дешевле на ' + rub(CARS[0].pricePerDay - CARS[1].pricePerDay) + ' в сутки.');
+        setChips(['Давай BMW, со страховкой', 'Давай Mustang']);
+      } else if (/депозит|залог/.test(t)) {
+        await tool('get_rental_terms', 'topic: deposit');
+        await say('Депозит зависит от машины, для кабриолетов — ' + rub(DEPOSIT) + '. Его блокируем на карте при выдаче и снимаем блокировку в течение 3 дней после сдачи, если нет штрафов и повреждений.');
+        setChips(['Хочу кабриолет на выходные, до 30 тысяч в сутки']);
+      } else {
+        await say('Могу подобрать машину, посчитать стоимость, оформить или перенести бронь. Напишите, на какие даты и что хочется: кабриолет, купе, сколько мест.');
+        setChips(['Хочу кабриолет на выходные, до 30 тысяч в сутки']);
+      }
+    }
+
+    async function propose(car, insurance) {
+      setTyping(true); await wait(400); setTyping(false);
+      await tool('quote_price', car.id + ', 17–19 окт' + (insurance ? ', extras: [full_insurance]' : ''));
+      var q = quote(car, insurance);
+      await tool('create_booking', 'action_id: act_' + nextActionId + ' · proposed');
+      await say('Подготовил бронь. Проверьте детали и подтвердите — без этого я ничего не оформлю.', 400);
+      var details = [
+        { label: 'Машина', value: car.name },
+        { label: 'Даты', value: TRIP.from + ' — ' + TRIP.to },
+        { label: 'Выдача', value: LOCATION },
+        { label: 'Аренда', value: rub(car.pricePerDay) + ' × ' + TRIP.days + NBSP + 'сут. = ' + rub(q.base) }
+      ];
+      if (insurance) details.push({ label: 'Страховка', value: rub(q.extra) });
+      details.push({ label: 'Итого', value: h('strong', { className: 'pl-num' }, rub(q.total)) });
+      details.push({ label: 'Депозит', value: rub(q.deposit) + ', вернём после сдачи' });
+      push({ kind: 'action', actionId: 'act_' + nextActionId++, tool: 'create_booking', status: 'proposed', title: 'Забронировать ' + car.name, details: details, note: 'После подтверждения машина держится за вами 30 минут до оплаты.' });
+    }
+
+    // Кнопки карточки вызывают «сервер» напрямую, мимо агента
+    async function confirm(m) {
+      patch(m.id, { status: 'running', note: 'Создаём бронь…' });
+      await wait(1200);
+      patch(m.id, { status: 'done', note: 'Бронь PL-' + (2400 + m.id) + ' создана и ждёт оплаты до ' + new Date(Date.now() + 30 * 60000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + '.' });
+      await say('Готово, бронь PL-' + (2400 + m.id) + ' за вами. Осталось оплатить — оплата проходит на защищённой странице, я её не вижу.', 500);
+      push({ kind: 'pay', bookingId: 'PL-' + (2400 + m.id) });
+      setChips(['Какой депозит?']);
+    }
+    async function cancel(m) {
+      patch(m.id, { status: 'cancelled', note: 'Бронь не создана.' });
+      await say('Хорошо, ничего не бронирую. Можем посмотреть другие даты или машины.', 500);
+      setChips(['Чем они отличаются?', 'Какой депозит?']);
+    }
+
+    function send(text) {
+      text = (text || '').trim();
+      if (!text || typing) return;
+      push({ role: 'user', kind: 'text', text: text });
+      setDraft('');
+      agent(text);
+    }
+
+    function render(m) {
+      if (m.kind === 'text') return h(P.AgentMessage, { key: m.id, role: m.role, time: m.time }, m.text);
+      if (m.kind === 'cars') return h('div', { key: m.id, className: 'block cars', role: 'list', 'aria-label': 'Подобранные машины' },
+        m.cars.map(function (c) { return h(P.CarCard, Object.assign({ key: c.id, onBook: function () { send('Беру ' + c.name); } }, c)); }));
+      if (m.kind === 'action') return h('div', { key: m.id, className: 'block' }, h(P.AgentAction, {
+        title: m.title, status: m.status, statusBadge: m.status !== 'done', details: m.details, note: m.note,
+        onConfirm: function () { confirm(m); }, onCancel: function () { cancel(m); } }));
+      if (m.kind === 'pay') return h('div', { key: m.id, className: 'block' },
+        h(P.Button, { variant: 'primary', size: 'lg', onClick: function () { alert('Здесь откроется страница оплаты брони ' + m.bookingId); } }, 'Перейти к оплате'));
+    }
+
+    return h('div', { className: 'app' },
+      h('header', { className: 'top' },
+        h('div', { className: 'pl-avatar', 'aria-hidden': true }, 'AI'),
+        h('div', null, h('div', { className: 'top-name' }, 'Помощник Pitlane'), h('div', { className: 'top-sub' }, 'на связи')),
+        h('select', { 'aria-label': 'Тема', value: theme, onChange: function (e) { setTheme(e.target.value); } },
+          h('option', { value: 'auto' }, 'Как в системе'), h('option', { value: 'light' }, 'Светлая'), h('option', { value: 'dark' }, 'Тёмная'))),
+      h('main', { className: 'feed', ref: feed, 'aria-live': 'polite' },
+        h('div', { className: 'day' }, 'Сегодня'),
+        msgs.map(render),
+        typing && h(P.AgentMessage, { role: 'agent' }, h('span', { className: 'typing-row' }, h('span', { className: 'typing', 'aria-hidden': true }, h('i'), h('i'), h('i')), h('span', { className: status ? 'typing-text' : 'sr-only' }, status || 'Агент печатает')))),
+      chips.length > 0 && h('div', { className: 'chips' }, chips.map(function (c) {
+        return h('button', { key: c, type: 'button', className: 'chip', onClick: function () { send(c); } }, c);
+      })),
+      h('form', { className: 'composer', onSubmit: function (e) { e.preventDefault(); send(draft); } },
+        h(P.Input, { 'aria-label': 'Сообщение', placeholder: 'Напишите, что ищете', value: draft, autoComplete: 'off', onChange: function (e) { setDraft(e.target.value); } }),
+        h(P.Button, { type: 'submit', variant: 'primary', disabled: !draft.trim() || typing }, 'Отправить')),
+      h('div', { className: 'hint-line' }, 'Агент предлагает, вы подтверждаете. Оплату и документы он не видит.'));
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+})();
+</script>
+</body>
+</html>

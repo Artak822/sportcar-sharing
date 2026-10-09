@@ -84,11 +84,11 @@
         p.time && h('span', { className: 'pl-msg-time' }, p.time)));
   }
 
-  var ACTION_STATUS = { proposed: ['agent', 'Ждёт подтверждения'], running: ['agent', 'Выполняется'], done: ['available', 'Выполнено'], failed: ['booked', 'Не удалось'] };
+  var ACTION_STATUS = { proposed: ['agent', 'Ждёт подтверждения'], running: ['agent', 'Выполняется'], done: ['available', 'Выполнено'], failed: ['booked', 'Не удалось'], cancelled: ['neutral', 'Отменено'] };
   function AgentAction(p) {
     var status = p.status || 'proposed', st = ACTION_STATUS[status];
-    return h('div', { className: cx('pl-action', status === 'done' && 'pl-action-done', status === 'failed' && 'pl-action-failed'), role: 'group', 'aria-label': p.title },
-      h('div', { className: 'pl-action-head' }, h('span', { className: 'pl-tool' }, p.tool), h(Badge, { tone: st[0] }, st[1])),
+    return h('div', { className: cx('pl-action', status === 'done' && 'pl-action-done', status === 'failed' && 'pl-action-failed', status === 'cancelled' && 'pl-action-cancelled'), role: 'group', 'aria-label': p.title },
+      (p.tool || p.statusBadge !== false) && h('div', { className: 'pl-action-head' }, p.tool ? h('span', { className: 'pl-tool' }, p.tool) : h('span'), p.statusBadge !== false && h(Badge, { tone: st[0] }, st[1])),
       h('p', { className: 'pl-action-title' }, p.title),
       p.details && h('dl', { className: 'pl-action-details' }, p.details.map(function (d, i) {
         return [h('dt', { key: 'k' + i }, d.label), h('dd', { key: 'v' + i }, d.value)];

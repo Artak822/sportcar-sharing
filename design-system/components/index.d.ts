@@ -63,10 +63,12 @@ export interface AgentMessageProps {
 export declare function AgentMessage(props: AgentMessageProps): React.ReactElement;
 
 export interface AgentActionProps {
-  /** Имя MCP-инструмента, например create_booking */
-  tool: string;
+  /** Имя MCP-инструмента, например create_booking. Для отладки и витрины; клиенту обычно не показывают */
+  tool?: string;
   title: string;
-  status?: 'proposed' | 'running' | 'done' | 'failed';
+  status?: 'proposed' | 'running' | 'done' | 'failed' | 'cancelled';
+  /** false — не показывать бейдж статуса (рамка и note всё равно меняются) */
+  statusBadge?: boolean;
   details?: { label: string; value: React.ReactNode }[];
   note?: string;
   confirmLabel?: string;
