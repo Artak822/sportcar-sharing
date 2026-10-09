@@ -1,0 +1,12 @@
+services:
+  pitlane:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env          # GEMINI_API_KEY, при желании GEMINI_MODEL и GEMINI_FALLBACK_MODEL
+    volumes:
+      - pitlane-data:/data  # база SQLite переживает пересборку
+    restart: unless-stopped
+
+volumes:
+  pitlane-data:
