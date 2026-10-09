@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitlane — дизайн-система</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components/bundle.css">
+<style>
+  .ds { max-width: 1120px; margin: 0 auto; padding: var(--space-8) var(--space-4) var(--space-16); }
+  .ds-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+  .ds h2 { margin: var(--space-12) 0 var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line); }
+  .ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }
+  .sw { border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; background: var(--surface-raised); }
+  .sw div { height: 56px; }
+  .sw p { margin: 0; padding: var(--space-2) var(--space-3); font-family: var(--font-mono); font-size: 12px; line-height: 16px; }
+  .ty { display: grid; gap: var(--space-3); }
+  .ty-row { display: grid; grid-template-columns: 120px 1fr; gap: var(--space-4); align-items: baseline; }
+  .ty-row > div { min-width: 0; overflow-wrap: anywhere; }
+  @media (max-width: 640px) { .ty-row { grid-template-columns: 1fr; gap: var(--space-1); } }
+  .ty-row code { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+  .chat { background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); max-width: 640px; }
+  .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-6); align-items: start; }
+  .split > * { min-width: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="components/bundle.js"></script>
+<script>
+  var P = window.Pitlane, h = React.createElement;
+  var COLORS = ['surface','surface-raised','surface-sunken','line','line-strong','ink','ink-muted','papaya','on-papaya','papaya-text','papaya-soft','carbon','on-carbon','go','go-soft','caution','caution-soft','stop','stop-soft','agent','agent-soft'];
+  var TYPE = [['display-xl','Возьми 911 на выходные'],['display','Porsche 911 Carrera S'],['heading','Ваше бронирование'],['title','BMW M4 Competition'],['body','Заберите машину на Ленинградском проспекте, 31 с 10:00.'],['body-sm','Депозит вернётся в течение 3 рабочих дней.'],['label','Мощность'],['data-lg','24 900 ₽'],['data','3,5 с · 450 л.с.'],['code','create_booking']];
+
+  function App() {
+    var s = React.useState(null), theme = s[0], setTheme = s[1];
+    React.useEffect(function () {
+      if (theme) document.documentElement.setAttribute('data-theme', theme);
+      else document.documentElement.removeAttribute('data-theme');
+    }, [theme]);
+    return h('div', { className: 'ds' },
+      h('div', { className: 'ds-top' },
+        h('h1', { className: 'display-xl', style: { margin: 0 } }, 'Pitlane'),
+        h('div', { className: 'pl-row', style: { padding: 0 } },
+          h(P.Button, { variant: theme === 'light' ? 'primary' : 'secondary', onClick: function () { setTheme('light'); } }, 'Светлая'),
+          h(P.Button, { variant: theme === 'dark' ? 'primary' : 'secondary', onClick: function () { setTheme('dark'); } }, 'Тёмная'),
+          h(P.Button, { variant: theme === null ? 'primary' : 'secondary', onClick: function () { setTheme(null); } }, 'Как в системе'))),
+      h('p', { className: 'body', style: { color: 'var(--ink-muted)', maxWidth: 640 } }, 'Аренда спорткаров. Агент помогает, решаете вы. Правила — в README.md, токены — в tokens.css.'),
+
+      h('h2', { className: 'heading' }, 'Цвета'),
+      h('div', { className: 'ds-grid' }, COLORS.map(function (c) {
+        return h('div', { className: 'sw', key: c }, h('div', { style: { background: 'var(--' + c + ')' } }), h('p', null, '--' + c));
+      })),
+
+      h('h2', { className: 'heading' }, 'Типографика'),
+      h('div', { className: 'ty' }, TYPE.map(function (t) {
+        return h('div', { className: 'ty-row', key: t[0] }, h('code', null, '.' + t[0]), h('div', { className: t[0] }, t[1]));
+      })),
+
+      h('h2', { className: 'heading' }, 'Кнопки и статусы'),
+      h('div', { className: 'pl-row', style: { padding: 0 } },
+        h(P.Button, { variant: 'primary' }, 'Забронировать'), h(P.Button, null, 'Изменить даты'),
+        h(P.Button, { variant: 'ghost' }, 'Подробнее'), h(P.Button, { variant: 'agent' }, 'Подтвердить'),
+        h(P.Button, { variant: 'primary', disabled: true }, 'Недоступен')),
+      h('div', { className: 'pl-row', style: { padding: 0, marginTop: 12 } },
+        h(P.Badge, { tone: 'available' }), h(P.Badge, { tone: 'booked' }), h(P.Badge, { tone: 'service' }),
+        h(P.Badge, { tone: 'agent' }, 'Предложено агентом'), h(P.Badge, null, 'Кабриолет')),
+
+      h('h2', { className: 'heading' }, 'Формы'),
+      h('div', { className: 'split' },
+        h(P.Input, { label: 'Телефон', placeholder: '+7 900 000-00-00', hint: 'Пришлём код подтверждения' }),
+        h(P.Input, { label: 'Номер водительского удостоверения', defaultValue: '77 АВ 12', error: 'Нужно 10 цифр: серия и номер' })),
+
+      h('h2', { className: 'heading' }, 'Каталог'),
+      h('div', { className: 'split' },
+        h(P.CarCard, { name: 'Porsche 911 Carrera S', pricePerDay: 34900, specs: { power: 450, accel: 3.5, seats: 4 } }),
+        h(P.CarCard, { name: 'BMW M4 Competition', pricePerDay: 24900, status: 'booked', specs: { power: 510, accel: 3.9, seats: 4 } }),
+        h(P.CarCard, { name: 'Audi R8 V10 Performance', pricePerDay: 44900, status: 'service', specs: { power: 620, accel: 3.1, seats: 2 } })),
+      h('div', { style: { marginTop: 24, display: 'grid', gap: 16 } },
+        h(P.SpecList, { items: [{ label: 'Мощность', value: '450', unit: 'л.с.' }, { label: '0–100 км/ч', value: '3,5', unit: 'с' }, { label: 'Макс. скорость', value: '308', unit: 'км/ч' }, { label: 'Привод', value: 'Задний' }] }),
+        h(P.SpecList, { dark: true, items: [{ label: 'Мощность', value: '510', unit: 'л.с.' }, { label: '0–100 км/ч', value: '3,9', unit: 'с' }, { label: 'Пробег в сутки', value: '200', unit: 'км' }] })),
+
+      h('h2', { className: 'heading' }, 'Бронирование и чат агента'),
+      h('div', { className: 'split' },
+        h(P.BookingSummary, { car: 'Porsche 911 Carrera S', from: 'Сб, 18 окт · 10:00', to: 'Пн, 20 окт · 10:00', days: 2, pricePerDay: 34900, deposit: 100000, extras: [{ label: 'Полная страховка', price: 6000 }], onConfirm: function () {} }),
+        h('div', { className: 'chat' },
+          h(P.AgentMessage, { role: 'user', time: '14:02' }, 'Хочу что-нибудь открытое на выходные, до 30 тысяч в сутки'),
+          h(P.AgentMessage, { time: '14:02' }, 'Нашёл два кабриолета, свободных 18–20 октября. Дешевле всего BMW M4 Competition Convertible — 27 900 ₽ в сутки.'),
+          h(P.AgentAction, { tool: 'create_booking', title: 'Забронировать BMW M4 Competition Convertible', details: [{ label: 'Даты', value: '18–20 окт' }, { label: 'Сумма', value: '55 800 ₽' }, { label: 'Депозит', value: '100 000 ₽' }], note: 'Деньги спишутся только после подтверждения оплаты.' }),
+          h(P.AgentAction, { tool: 'check_availability', title: 'Проверил свободные даты для Audi R8', status: 'done' }),
+          h(P.AgentAction, { tool: 'cancel_booking', title: 'Отменить бронь № 4821', status: 'failed', note: 'До выдачи меньше 24 часов. Отмена только через менеджера.' }))));
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
