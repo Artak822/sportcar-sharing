@@ -5,7 +5,7 @@ import { AgentMessage, Button, CarCard, Input } from '../ds.js'
 import { useStore } from '../store.jsx'
 import ActionCard, { decide } from './ActionCard.jsx'
 
-const GREETING = 'Здравствуйте. Я консьерж Pitlane: подберу машину, посчитаю стоимость и подготовлю бронь. Ничего не оформляю без вашего подтверждения.'
+const GREETING = 'Здравствуйте. Я консьерж Pitlane: подберу машину, посчитаю стоимость и подготовлю бронь.'
 const STARTERS = ['Хочу кабриолет на выходные, до 30 тысяч в сутки', 'Какой депозит?', 'Мои брони']
 
 export default function Chat({ items, setItems, onReset }) {

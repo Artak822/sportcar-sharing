@@ -360,4 +360,7 @@ if SITE.exists():
         """Маршруты сайта — на стороне React, поэтому на любой путь кроме API отдаём index.html."""
         if path.startswith(("api/", "mcp")):
             raise ServiceError("not_found", "Не найдено", 404)
+        file = (SITE / path).resolve()
+        if path and file.is_file() and file.is_relative_to(SITE.resolve()):
+            return FileResponse(file)  # файлы из public/: фото машин и т. п.
         return FileResponse(SITE / "index.html")

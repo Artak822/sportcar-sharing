@@ -38,6 +38,7 @@ USERS = [
 
 def seed(conn) -> None:
     if conn.execute("SELECT 1 FROM cars LIMIT 1").fetchone():
+        add_photos(conn)
         return
     now = services.now()
     created = services.iso(now)
@@ -46,6 +47,7 @@ def seed(conn) -> None:
         " mileage_limit_km, min_age, min_experience) VALUES (?,?,?,?,?,?,?,?,?,?, 300, ?, 3)",
         [c + (25 if c[4] >= 40000 else 23,) for c in CARS],
     )
+    add_photos(conn)
     conn.executemany("INSERT INTO locations VALUES (?,?,?,?)", LOCATIONS)
     conn.executemany("INSERT INTO extras VALUES (?,?,?,?)", EXTRAS)
     conn.executemany(
@@ -62,6 +64,11 @@ def seed(conn) -> None:
         (services.iso(start), services.iso(end), days, price, days * price, days * price, deposit, created),
     )
     conn.execute("UPDATE bookings SET number = ? WHERE id = ?", (services.booking_number(cur.lastrowid), cur.lastrowid))
+
+
+def add_photos(conn) -> None:
+    """Фото машин лежат в frontend/public/car-photos; базам, созданным раньше, тоже проставляем адреса."""
+    conn.execute("UPDATE cars SET image_url = '/car-photos/' || id || '.jpg' WHERE image_url IS NULL")
 
 
 def main() -> None:

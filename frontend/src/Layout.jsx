@@ -45,7 +45,7 @@ export default function Layout() {
       <main className="page">
         <Outlet />
       </main>
-      <footer className="footer"><div className="footer-in">Pitlane — учебный проект. Оплата и документы — демо.</div></footer>
+      <footer className="footer"><div className="footer-in">Pitlane — учебный проект. Оплата и документы — демо. <a href="/car-photos/CREDITS.md" target="_blank" rel="noreferrer">Авторы фото</a></div></footer>
       <ChatWidget />
     </div>
   )

@@ -103,8 +103,8 @@ a { color: inherit; }
 .car-side { position: sticky; top: 88px; gap: var(--space-4); }
 .car-side > .booking-form { padding: var(--space-4); background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
 .car-side .pl-summary { max-width: none; }
-.car-photo { aspect-ratio: 16 / 9; background: var(--surface-sunken); border-radius: var(--radius-lg); display: grid; place-items: center; color: var(--ink-muted); overflow: hidden; }
-.car-photo img { width: 100%; height: 100%; object-fit: cover; }
+.car-photo { position: relative; aspect-ratio: 16 / 9; background: var(--surface-sunken); border-radius: var(--radius-lg); display: grid; place-items: center; color: var(--ink-muted); overflow: hidden; }
+.car-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .car-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .terms { display: flex; flex-direction: column; gap: var(--space-3); }
 .terms-list { display: grid; grid-template-columns: 120px 1fr; gap: var(--space-2) var(--space-4); margin: 0; font-size: 15px; }
